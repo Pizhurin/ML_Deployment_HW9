@@ -1,0 +1,80 @@
+# GitHub Actions, тригеры: push в main, изменение DAG или Terraform-конфигов
+
+name: ML Pipeline CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  test-and-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install apache-airflow
+          pip install pytest
+
+      - name: Validate Airflow DAG
+        run: |
+          airflow db init
+          airflow dags list
+
+      - name: Run tests
+        run: pytest
+
+  terraform-validate:
+    runs-on: ubuntu-latest
+    needs: test-and-validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: terraform-validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+      - name: Deploy message
+        run: echo "ML pipeline deployed successfully"
+
+  destroy-infrastructure:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve
